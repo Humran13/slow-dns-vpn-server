@@ -70,12 +70,16 @@ show_server_configuration() {
     echo "Nameserver hostname   : ${NS_HOSTNAME}"
     echo "Public IPv4           : ${PUBLIC_IPV4:-unknown}"
     echo "DNS UDP port          : ${DNS_UDP_PORT}"
-    echo "DNS TCP fallback      : ${DNS_TCP_ENABLED}"
     echo "MTU                   : ${MTU}"
     echo "SSH backend port (loopback only) : ${SSH_TUNNEL_PORT}"
     echo "Installed on          : ${INSTALL_DATE}"
     echo "dnstt version         : $(conf_get DNSTT_VERSION)"
     echo "Server public key     : $(cat "${SLOWDNS_KEYS_DIR}/server.pub" 2>/dev/null || echo unknown)"
+    if [[ "$LOW_PROFILE_MODE" == "true" ]]; then
+        echo "Low-Profile Mode      : Enabled"
+    else
+        echo "Low-Profile Mode      : Disabled"
+    fi
 }
 
 restart_service() {

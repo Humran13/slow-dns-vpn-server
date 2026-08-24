@@ -138,11 +138,6 @@ DNS_UDP_PORT="53"
 read -r -p "UDP port for the DNS tunnel to listen on [53]: " input
 DNS_UDP_PORT="${input:-53}"
 
-DNS_TCP_ENABLED="false"
-if confirm "Also listen for DNS tunnel traffic over TCP/53 (helps with some resolvers)?" n; then
-    DNS_TCP_ENABLED="true"
-fi
-
 SSH_TUNNEL_PORT="2222"
 read -r -p "Internal loopback-only port for the SSH VPN backend [2222]: " input
 SSH_TUNNEL_PORT="${input:-2222}"
@@ -150,17 +145,68 @@ SSH_TUNNEL_PORT="${input:-2222}"
 MTU="1232"
 
 echo
+cat <<'EOF'
+Low-Profile Mode makes the server behave more conservatively: a smaller DNS
+MTU, longer keepalive/restart intervals, bounded restart attempts, and
+sensible resource ceilings. It reduces network and service "noise" and
+protects against runaway processes - it is NOT an anti-detection, firewall-
+bypass, or traffic-obfuscation feature, and it does not make the tunnel
+harder to identify or block on a network that inspects DNS traffic.
+EOF
+LOW_PROFILE_MODE="false"
+if confirm "Enable Low-Profile Mode?" n; then
+    LOW_PROFILE_MODE="true"
+fi
+
+echo
 echo "Configuration summary:"
 echo "  Domain base           : ${BASE_DOMAIN}"
 echo "  Nameserver hostname    : ${NS_HOSTNAME}"
 echo "  Tunnel zone            : ${TUNNEL_DOMAIN}"
 echo "  DNS UDP port            : ${DNS_UDP_PORT}"
-echo "  DNS TCP fallback        : ${DNS_TCP_ENABLED}"
 echo "  SSH backend port (local): ${SSH_TUNNEL_PORT}"
+echo "  Low-Profile Mode        : ${LOW_PROFILE_MODE}"
 echo
 if ! confirm "Proceed with installation?" y; then
     echo "Aborted."
     exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Derived values for Low-Profile Mode. Normal-mode values are set to
+# systemd/OpenSSH's own real default behavior (explicit, not a behavior
+# change); Low-Profile values are more conservative. See README "Low-Profile
+# Mode" for what each setting does and why.
+# ---------------------------------------------------------------------------
+if [[ "$LOW_PROFILE_MODE" == "true" ]]; then
+    MTU="512"
+    SSHD_CLIENT_ALIVE_INTERVAL="120"
+    SSHD_CLIENT_ALIVE_COUNT_MAX="3"
+    SSHD_MAX_AUTH_TRIES="3"
+    SSHD_LOGIN_GRACE_TIME="15"
+    SSHD_MAX_STARTUPS="5:50:20"
+    SVC_RESTART_SEC="10"
+    SVC_START_LIMIT_INTERVAL="300"
+    SVC_START_LIMIT_BURST="5"
+    SVC_TIMEOUT_STOP="10"
+    TUNNEL_MEMORY_MAX="256M"
+    TUNNEL_TASKS_MAX="64"
+    SSH_MEMORY_MAX="512M"
+    SSH_TASKS_MAX="256"
+else
+    SSHD_CLIENT_ALIVE_INTERVAL="60"
+    SSHD_CLIENT_ALIVE_COUNT_MAX="3"
+    SSHD_MAX_AUTH_TRIES="4"
+    SSHD_LOGIN_GRACE_TIME="20"
+    SSHD_MAX_STARTUPS="10:30:100"
+    SVC_RESTART_SEC="3"
+    SVC_START_LIMIT_INTERVAL="10"
+    SVC_START_LIMIT_BURST="5"
+    SVC_TIMEOUT_STOP="90"
+    TUNNEL_MEMORY_MAX="infinity"
+    TUNNEL_TASKS_MAX="infinity"
+    SSH_MEMORY_MAX="infinity"
+    SSH_TASKS_MAX="infinity"
 fi
 
 # ---------------------------------------------------------------------------
@@ -325,6 +371,11 @@ sed \
     -e "s#__HOSTKEY_ED25519__#${SLOWDNS_SSH_DIR}/ssh_host_ed25519_key#" \
     -e "s#__PIDFILE__#/run/slowdns-ssh.pid#" \
     -e "s#__ALLOWGROUP__#${SLOWDNS_VPN_GROUP}#" \
+    -e "s#__CLIENTALIVEINTERVAL__#${SSHD_CLIENT_ALIVE_INTERVAL}#" \
+    -e "s#__CLIENTALIVECOUNTMAX__#${SSHD_CLIENT_ALIVE_COUNT_MAX}#" \
+    -e "s#__MAXAUTHTRIES__#${SSHD_MAX_AUTH_TRIES}#" \
+    -e "s#__LOGINGRACETIME__#${SSHD_LOGIN_GRACE_TIME}#" \
+    -e "s#__MAXSTARTUPS__#${SSHD_MAX_STARTUPS}#" \
     "${SCRIPT_DIR}/config/sshd_config.tunnel.template" > "$SSHD_CONFIG_PATH"
 chmod 0600 "$SSHD_CONFIG_PATH"
 
@@ -343,11 +394,11 @@ conf_set TUNNEL_DOMAIN "$TUNNEL_DOMAIN"
 conf_set NS_HOSTNAME "$NS_HOSTNAME"
 conf_set PUBLIC_IPV4 "$PUBLIC_IPV4"
 conf_set DNS_UDP_PORT "$DNS_UDP_PORT"
-conf_set DNS_TCP_ENABLED "$DNS_TCP_ENABLED"
 conf_set MTU "$MTU"
 conf_set SSH_TUNNEL_PORT "$SSH_TUNNEL_PORT"
 conf_set INSTALL_DATE "$(date +%F)"
 conf_set DNSTT_VERSION "$DNSTT_TAG"
+conf_set LOW_PROFILE_MODE "$LOW_PROFILE_MODE"
 chmod 0600 "$SLOWDNS_SERVER_CONF"
 log_ok "Saved ${SLOWDNS_SERVER_CONF}"
 
@@ -356,20 +407,28 @@ log_ok "Saved ${SLOWDNS_SERVER_CONF}"
 # ---------------------------------------------------------------------------
 header "Installing systemd Services"
 
-TUNNEL_EXEC="${SLOWDNS_BIN_DIR}/dnstt-server -mtu ${MTU} -udp :${DNS_UDP_PORT}"
-if [[ "$DNS_TCP_ENABLED" == "true" ]]; then
-    TUNNEL_EXEC="${TUNNEL_EXEC} -tcp :${DNS_UDP_PORT}"
-fi
-TUNNEL_EXEC="${TUNNEL_EXEC} -privkey-file ${SLOWDNS_KEYS_DIR}/server.key ${TUNNEL_DOMAIN} 127.0.0.1:${SSH_TUNNEL_PORT}"
+TUNNEL_EXEC="${SLOWDNS_BIN_DIR}/dnstt-server -mtu ${MTU} -udp :${DNS_UDP_PORT} -privkey-file ${SLOWDNS_KEYS_DIR}/server.key ${TUNNEL_DOMAIN} 127.0.0.1:${SSH_TUNNEL_PORT}"
 
 sed \
     -e "s#__EXEC__#${TUNNEL_EXEC}#" \
     -e "s#__USER__#${SLOWDNS_SYSTEM_USER}#" \
     -e "s#__GROUP__#${SLOWDNS_SYSTEM_USER}#" \
+    -e "s#__STARTLIMITINTERVAL__#${SVC_START_LIMIT_INTERVAL}#" \
+    -e "s#__STARTLIMITBURST__#${SVC_START_LIMIT_BURST}#" \
+    -e "s#__RESTARTSEC__#${SVC_RESTART_SEC}#" \
+    -e "s#__TIMEOUTSTOP__#${SVC_TIMEOUT_STOP}#" \
+    -e "s#__TUNNELMEMORYMAX__#${TUNNEL_MEMORY_MAX}#" \
+    -e "s#__TUNNELTASKSMAX__#${TUNNEL_TASKS_MAX}#" \
     "${SCRIPT_DIR}/systemd/slowdns-tunnel.service.template" > "/etc/systemd/system/${SLOWDNS_TUNNEL_SERVICE}"
 
 sed \
     -e "s#__SSHD_CONFIG__#${SSHD_CONFIG_PATH}#" \
+    -e "s#__STARTLIMITINTERVAL__#${SVC_START_LIMIT_INTERVAL}#" \
+    -e "s#__STARTLIMITBURST__#${SVC_START_LIMIT_BURST}#" \
+    -e "s#__RESTARTSEC__#${SVC_RESTART_SEC}#" \
+    -e "s#__TIMEOUTSTOP__#${SVC_TIMEOUT_STOP}#" \
+    -e "s#__SSHMEMORYMAX__#${SSH_MEMORY_MAX}#" \
+    -e "s#__SSHTASKSMAX__#${SSH_TASKS_MAX}#" \
     "${SCRIPT_DIR}/systemd/slowdns-ssh.service.template" > "/etc/systemd/system/${SLOWDNS_SSH_SERVICE}"
 
 state_add "SYSTEMD_UNIT:${SLOWDNS_TUNNEL_SERVICE}"
@@ -385,9 +444,6 @@ header "Configuring Firewall"
 
 if command -v ufw &>/dev/null; then
     ufw allow "${DNS_UDP_PORT}/udp" comment "Slow DNS VPN tunnel" && state_add "UFW_RULE:${DNS_UDP_PORT}/udp"
-    if [[ "$DNS_TCP_ENABLED" == "true" ]]; then
-        ufw allow "${DNS_UDP_PORT}/tcp" comment "Slow DNS VPN tunnel (TCP fallback)" && state_add "UFW_RULE:${DNS_UDP_PORT}/tcp"
-    fi
     if ufw status | grep -q "Status: active"; then
         log_ok "UFW is active; rule(s) added."
     else
@@ -462,6 +518,7 @@ echo "Slow DNS domain (client-facing) : ${TUNNEL_DOMAIN}"
 echo "Nameserver hostname             : ${NS_HOSTNAME}"
 echo "Public IPv4                     : ${PUBLIC_IPV4:-unknown}"
 echo "Server public key               : ${PUBKEY_HEX}"
+echo "Low-Profile Mode                : ${LOW_PROFILE_MODE}"
 echo
 echo "Add these DNS records at your domain registrar/DNS provider:"
 echo "  A    ${NS_HOSTNAME}    ->  ${PUBLIC_IPV4:-<your server IPv4>}"

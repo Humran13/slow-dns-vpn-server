@@ -1,10 +1,13 @@
-# Managed by slow-dns-vpn-server. Do not edit by hand; re-run install.sh or
-# scripts/repair.sh to regenerate.
+# Managed by slow-dns-vpn-server. Do not edit by hand; re-run install.sh to
+# regenerate (existing domain, users, and keys are preserved).
 #
 # This is a DEDICATED, ISOLATED sshd instance used only as the local
 # transport backend for Slow DNS VPN tunnel users. It is separate from, and
 # never modifies, the system's administrative SSH server. It listens only on
 # 127.0.0.1 and is reachable exclusively through the DNS tunnel.
+#
+# The keepalive/auth-timing/connection-rate values below come from
+# server.conf's LOW_PROFILE_MODE setting - see README "Low-Profile Mode".
 Port __PORT__
 ListenAddress 127.0.0.1
 Protocol 2
@@ -37,7 +40,8 @@ Subsystem sftp /bin/false
 Banner none
 PrintMotd no
 PrintLastLog no
-ClientAliveInterval 60
-ClientAliveCountMax 3
-MaxAuthTries 4
-LoginGraceTime 20
+ClientAliveInterval __CLIENTALIVEINTERVAL__
+ClientAliveCountMax __CLIENTALIVECOUNTMAX__
+MaxAuthTries __MAXAUTHTRIES__
+LoginGraceTime __LOGINGRACETIME__
+MaxStartups __MAXSTARTUPS__

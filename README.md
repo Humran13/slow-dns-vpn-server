@@ -28,6 +28,7 @@ real service status, backups, and a clean uninstall.
 - [Client configuration](#client-configuration)
 - [Required ports](#required-ports)
 - [Firewall](#firewall)
+- [Low-Profile Mode](#low-profile-mode)
 - [Server status](#server-status)
 - [Logs](#logs)
 - [Backup and restore](#backup-and-restore)
@@ -158,8 +159,7 @@ The installer will:
 1. Confirm it's running as root, detect your Ubuntu version and CPU
    architecture, and check internet connectivity.
 2. Ask for your domain and confirm the derived DNS records.
-3. Ask for network options (DNS port, optional TCP fallback, internal SSH
-   backend port).
+3. Ask for network options (DNS port, internal SSH backend port).
 4. Install required packages, build dnstt from verified source, generate
    tunnel and SSH host keys, write systemd services, configure the firewall
    (if UFW is present), and start everything.
@@ -240,7 +240,6 @@ Point your applications at the resulting SOCKS proxy on `127.0.0.1:1080`.
 | Port | Protocol | Exposure | Purpose |
 |---|---|---|---|
 | 53 (configurable) | UDP | Public | DNS tunnel traffic |
-| 53 (configurable) | TCP | Public (optional) | DNS tunnel TCP fallback |
 | SSH backend port (default 2222) | TCP | `127.0.0.1` only | Tunnel's SSH backend - never exposed externally |
 
 Your existing administrative SSH port is never modified.
@@ -252,6 +251,68 @@ port(s) with a comment identifying it, and leaves every other rule untouched
 - it never runs `ufw reset` or removes existing rules. If UFW isn't active,
 you're warned that the rule was added but isn't being enforced. The SSH
 backend needs no firewall rule since it only listens on loopback.
+
+## Low-Profile Mode
+
+Low-Profile Mode is an optional installation choice that makes the server
+behave more conservatively: smaller DNS responses, longer keepalive and
+restart intervals, a bounded number of restart attempts, tighter connection
+rate limits on the SSH backend, and sensible resource ceilings so a stuck
+process can't run away with memory or process slots.
+
+**What it does not do:** Low-Profile Mode is not an anti-detection,
+firewall-bypass, censorship-evasion, or IDS/IPS-evasion feature. It does not
+make Slow DNS traffic invisible, undetectable, impossible to block, or
+DPI-proof. DNS tunneling has a distinctive traffic pattern; a network
+administrator who is actively looking for it (via query volume, query
+patterns, or DNS analytics) can still identify and block it regardless of
+this setting. Only use this project on networks and services where you are
+authorized to do so, and comply with the applicable terms of service and
+local laws.
+
+**How to enable it:** answer "y" to the "Enable Low-Profile Mode?" prompt
+during `sudo bash install.sh`. To change it on an existing installation,
+re-run `sudo bash install.sh` and answer the prompt differently - your
+domain, users, and tunnel/SSH keys are preserved; only the SSH backend
+config and systemd services are regenerated.
+
+**How to disable it:** answer "n" to the same prompt (this is also the
+default). `slowdns -> 9) Show Server Configuration` and `slowdns -> 12) Show
+Service Status` both show whether it's currently `Enabled` or `Disabled`.
+
+**Settings it changes** (normal-mode values shown are the project's regular
+defaults - Low-Profile Mode does not change them for an install that leaves
+it disabled):
+
+| Setting | Normal | Low-Profile | Why |
+|---|---|---|---|
+| dnstt `-mtu` (DNS response size) | 1232 | 512 | Smaller UDP responses, less fragmentation |
+| SSH `ClientAliveInterval` / `CountMax` | 60s / 3 | 120s / 3 | Fewer keepalive probes |
+| SSH `MaxAuthTries` | 4 | 3 | Fewer auth attempts per connection |
+| SSH `LoginGraceTime` | 20s | 15s | Less time held open by an unauthenticated connection |
+| SSH `MaxStartups` (unauthenticated connection limit) | `10:30:100` | `5:50:20` | Tighter cap on concurrent unauthenticated connections |
+| systemd `RestartSec` (both services) | 3s | 10s | Fewer, more spaced-out restart attempts |
+| systemd `StartLimitIntervalSec` / `StartLimitBurst` | 10s / 5 | 300s / 5 | Bounded restart attempts, never an infinite tight loop |
+| systemd `TimeoutStopSec` | 90s | 10s | Faster, cleaner shutdown/restart |
+| systemd `MemoryMax` / `TasksMax` | unlimited | 256M/64 (tunnel), 512M/256 (SSH backend) | Ceiling against a runaway process |
+
+The "Normal" values for `MaxStartups`, `StartLimitIntervalSec`/`Burst`,
+`TimeoutStopSec`, `MemoryMax`, and `TasksMax` are OpenSSH's and systemd's own
+real default behavior, made explicit in the generated config - a normal-mode
+install behaves exactly as it always has.
+
+Two things intentionally are **not** changed by Low-Profile Mode, and it's
+worth being explicit about why: dnstt-server has no verbose/debug logging
+flag to begin with (this installer never enables one, in either mode), and
+DNS query frequency is controlled by the client's `dnstt-client`, not this
+server-side installer - so there's no honest server-side setting for either
+one to toggle.
+
+**Tradeoffs:** enabling Low-Profile Mode reduces downstream tunnel bandwidth
+(smaller MTU means less data per DNS response) and means a crashing service
+waits longer between restart attempts and gives up sooner if it keeps
+failing, which can mean slightly longer downtime during a real outage in
+exchange for less restart noise during a transient one.
 
 ## Server status
 

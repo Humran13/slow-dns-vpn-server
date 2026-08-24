@@ -4,6 +4,11 @@ Documentation=https://www.bamsoftware.com/software/dnstt/
 After=network-online.target slowdns-ssh.service
 Wants=network-online.target
 Requires=slowdns-ssh.service
+# Restart-loop ceiling: give up if it fails this many times within this
+# window, instead of restarting forever. Values come from server.conf's
+# LOW_PROFILE_MODE setting - see README "Low-Profile Mode".
+StartLimitIntervalSec=__STARTLIMITINTERVAL__
+StartLimitBurst=__STARTLIMITBURST__
 
 [Service]
 Type=simple
@@ -27,8 +32,15 @@ LockPersonality=yes
 # binaries on some kernel/Go version combinations (Go's runtime briefly
 # needs W+X memory during startup on some architectures).
 
+# Resource ceiling (infinity = unlimited = today's default behavior; only
+# Low-Profile Mode sets a concrete cap). dnstt-server is a single lightweight
+# process, so this is a generous safety net, not a normal-use constraint.
+MemoryMax=__TUNNELMEMORYMAX__
+TasksMax=__TUNNELTASKSMAX__
+
 Restart=on-failure
-RestartSec=3
+RestartSec=__RESTARTSEC__
+TimeoutStopSec=__TIMEOUTSTOP__
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=slowdns-tunnel

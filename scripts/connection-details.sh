@@ -17,9 +17,6 @@ echo "Slow DNS Tunnel Host : ${TUNNEL_DOMAIN}"
 echo "Nameserver Hostname  : ${NS_HOSTNAME}"
 echo "Server Public Key    : ${PUBKEY}"
 echo "DNS UDP Port         : ${DNS_UDP_PORT}"
-if [[ "$DNS_TCP_ENABLED" == "true" ]]; then
-    echo "DNS TCP Port         : ${DNS_UDP_PORT} (fallback enabled)"
-fi
 echo
 echo "On the client, dnstt-client (or a compatible SlowDNS client app) is used"
 echo "to open a local TCP port that tunnels to this server's SSH backend, e.g.:"

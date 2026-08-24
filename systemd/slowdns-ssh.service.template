@@ -3,6 +3,11 @@ Description=Slow DNS VPN - dedicated loopback SSH backend for tunnel users
 Documentation=man:sshd(8)
 After=network.target
 Before=slowdns-tunnel.service
+# Restart-loop ceiling: give up if it fails this many times within this
+# window, instead of restarting forever. Values come from server.conf's
+# LOW_PROFILE_MODE setting - see README "Low-Profile Mode".
+StartLimitIntervalSec=__STARTLIMITINTERVAL__
+StartLimitBurst=__STARTLIMITBURST__
 
 [Service]
 Type=forking
@@ -10,8 +15,16 @@ PIDFile=/run/slowdns-ssh.pid
 ExecStartPre=/usr/sbin/sshd -t -f __SSHD_CONFIG__
 ExecStart=/usr/sbin/sshd -f __SSHD_CONFIG__
 ExecReload=/bin/kill -HUP $MAINPID
+
+# Resource ceiling (infinity = unlimited = today's default behavior; only
+# Low-Profile Mode sets a concrete cap). Sized generously since this sshd
+# forks a short-lived process per authenticated tunnel session.
+MemoryMax=__SSHMEMORYMAX__
+TasksMax=__SSHTASKSMAX__
+
 Restart=on-failure
-RestartSec=3
+RestartSec=__RESTARTSEC__
+TimeoutStopSec=__TIMEOUTSTOP__
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=slowdns-ssh

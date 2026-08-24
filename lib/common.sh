@@ -214,10 +214,10 @@ load_server_conf() {
     NS_HOSTNAME="$(conf_get NS_HOSTNAME)"
     PUBLIC_IPV4="$(conf_get PUBLIC_IPV4)"
     DNS_UDP_PORT="$(conf_get DNS_UDP_PORT 53)"
-    DNS_TCP_ENABLED="$(conf_get DNS_TCP_ENABLED false)"
     MTU="$(conf_get MTU 1232)"
     SSH_TUNNEL_PORT="$(conf_get SSH_TUNNEL_PORT 2222)"
     INSTALL_DATE="$(conf_get INSTALL_DATE)"
+    LOW_PROFILE_MODE="$(conf_get LOW_PROFILE_MODE false)"
 }
 
 # ---------------------------------------------------------------------------

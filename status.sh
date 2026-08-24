@@ -45,6 +45,11 @@ echo "IP Forwarding           : Not required (dnstt + SSH SOCKS is application-l
 echo "Public IPv4             : ${PUBLIC_IPV4:-unknown}"
 echo "Tunnel Domain            : ${TUNNEL_DOMAIN}"
 echo "Nameserver Hostname      : ${NS_HOSTNAME}"
+if [[ "$LOW_PROFILE_MODE" == "true" ]]; then
+    echo "Low-Profile Mode         : Enabled"
+else
+    echo "Low-Profile Mode         : Disabled"
+fi
 
 TOTAL=0 ACTIVE=0 DISABLED=0 EXPIRED=0
 while IFS= read -r u; do
