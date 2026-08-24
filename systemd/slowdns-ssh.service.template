@@ -1,0 +1,20 @@
+[Unit]
+Description=Slow DNS VPN - dedicated loopback SSH backend for tunnel users
+Documentation=man:sshd(8)
+After=network.target
+Before=slowdns-tunnel.service
+
+[Service]
+Type=forking
+PIDFile=/run/slowdns-ssh.pid
+ExecStartPre=/usr/sbin/sshd -t -f __SSHD_CONFIG__
+ExecStart=/usr/sbin/sshd -f __SSHD_CONFIG__
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=slowdns-ssh
+
+[Install]
+WantedBy=multi-user.target

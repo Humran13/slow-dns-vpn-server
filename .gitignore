@@ -1,0 +1,18 @@
+# Build artifacts (created under /opt at install time, never in-repo, but
+# ignored here in case of local testing)
+build/
+*.tar.gz
+
+# Secrets / keys - should never live in this repository
+*.key
+*.pem
+server.pub
+server.conf
+*.pub
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/

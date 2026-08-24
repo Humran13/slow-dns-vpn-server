@@ -1,0 +1,43 @@
+# Managed by slow-dns-vpn-server. Do not edit by hand; re-run install.sh or
+# scripts/repair.sh to regenerate.
+#
+# This is a DEDICATED, ISOLATED sshd instance used only as the local
+# transport backend for Slow DNS VPN tunnel users. It is separate from, and
+# never modifies, the system's administrative SSH server. It listens only on
+# 127.0.0.1 and is reachable exclusively through the DNS tunnel.
+Port __PORT__
+ListenAddress 127.0.0.1
+Protocol 2
+
+HostKey __HOSTKEY_RSA__
+HostKey __HOSTKEY_ED25519__
+PidFile __PIDFILE__
+
+# Only accounts in this group may authenticate here.
+AllowGroups __ALLOWGROUP__
+
+PermitRootLogin no
+PasswordAuthentication yes
+KbdInteractiveAuthentication no
+PubkeyAuthentication no
+UsePAM yes
+
+# Tunnel users get TCP forwarding (for the SSH SOCKS proxy) only - no shell,
+# no PTY, no X11, no agent/local-socket forwarding, no gateway ports.
+X11Forwarding no
+AllowTcpForwarding yes
+AllowAgentForwarding no
+AllowStreamLocalForwarding no
+GatewayPorts no
+PermitTTY no
+PermitTunnel no
+ForceCommand /usr/sbin/nologin
+Subsystem sftp /bin/false
+
+Banner none
+PrintMotd no
+PrintLastLog no
+ClientAliveInterval 60
+ClientAliveCountMax 3
+MaxAuthTries 4
+LoginGraceTime 20
