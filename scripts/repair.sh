@@ -67,8 +67,13 @@ for svc in "$SLOWDNS_SSH_SERVICE" "$SLOWDNS_TUNNEL_SERVICE"; do
 done
 
 # --- DNS tunnel actually listening ------------------------------------------
-if ! ss -uln 2>/dev/null | grep -q ":${DNS_UDP_PORT} "; then
-    fix "Nothing is listening on UDP/${DNS_UDP_PORT}. Check 'journalctl -u ${SLOWDNS_TUNNEL_SERVICE}'."
+if [[ -n "${DNS_BIND_ADDRESS:-}" ]]; then
+    DNS_TARGET="${DNS_BIND_ADDRESS}:${DNS_UDP_PORT}"
+else
+    DNS_TARGET=":${DNS_UDP_PORT}"
+fi
+if ! ss -uln 2>/dev/null | grep -q "${DNS_TARGET} "; then
+    fix "Nothing is listening on ${DNS_TARGET}. Check 'journalctl -u ${SLOWDNS_TUNNEL_SERVICE}'."
 fi
 
 # --- SSH backend config still valid -----------------------------------------

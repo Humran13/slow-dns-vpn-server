@@ -28,8 +28,13 @@ else
     echo "SSH Backend Service     : ${C_RED}STOPPED${C_RESET}"
 fi
 
-if ss -uln 2>/dev/null | grep -q ":${DNS_UDP_PORT} "; then
-    echo "DNS Tunnel Listening    : ${C_GREEN}YES (UDP/${DNS_UDP_PORT})${C_RESET}"
+if [[ -n "${DNS_BIND_ADDRESS:-}" ]]; then
+    DNS_TARGET="${DNS_BIND_ADDRESS}:${DNS_UDP_PORT}"
+else
+    DNS_TARGET=":${DNS_UDP_PORT}"
+fi
+if ss -uln 2>/dev/null | grep -q "${DNS_TARGET} "; then
+    echo "DNS Tunnel Listening    : ${C_GREEN}YES (UDP ${DNS_TARGET})${C_RESET}"
 else
     echo "DNS Tunnel Listening    : ${C_RED}NO${C_RESET}"
 fi

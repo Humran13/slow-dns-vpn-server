@@ -216,6 +216,7 @@ load_server_conf() {
     TUNNEL_DOMAIN="$(conf_get TUNNEL_DOMAIN)"
     NS_HOSTNAME="$(conf_get NS_HOSTNAME)"
     PUBLIC_IPV4="$(conf_get PUBLIC_IPV4)"
+    DNS_BIND_ADDRESS="$(conf_get DNS_BIND_ADDRESS)"
     DNS_UDP_PORT="$(conf_get DNS_UDP_PORT 53)"
     MTU="$(conf_get MTU 1232)"
     SSH_TUNNEL_PORT="$(conf_get SSH_TUNNEL_PORT 2222)"
@@ -232,6 +233,64 @@ get_public_ipv4() {
     ip="$(curl -4 -fsS --max-time 5 https://api.ipify.org 2>/dev/null)" || \
     ip="$(ip -4 addr show scope global 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | head -n1)" || true
     echo "$ip"
+}
+
+# ---------------------------------------------------------------------------
+# DNS bind address helpers
+# ---------------------------------------------------------------------------
+# dnstt must bind UDP/<port> only on the address that receives external DNS
+# tunnel traffic. Binding to the wildcard address (:port) collides with
+# systemd-resolved's loopback listeners on 127.0.0.53:53 / 127.0.0.54:53.
+local_ipv4_addresses() {
+    ip -4 addr show scope global 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1
+}
+
+ip_is_local() {
+    local addr="$1" ip
+    for ip in $(local_ipv4_addresses); do
+        [[ "$ip" == "$addr" ]] && return 0
+    done
+    return 1
+}
+
+get_outbound_ipv4() {
+    ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -n1
+}
+
+# Echo the local IPv4 address dnstt should bind for external tunnel traffic.
+# Prefers the configured public IPv4 when it is actually assigned to a local
+# interface; otherwise falls back to the interface address used for outbound
+# traffic (covers NAT/cloud VPS where the public IP is not local). Never
+# returns a loopback or wildcard address. Exits 1 if nothing is found.
+select_dns_bind_address() {
+    local public_ip="${1:-}" outbound first
+    if [[ -n "$public_ip" ]] && ip_is_local "$public_ip"; then
+        echo "$public_ip"
+        return 0
+    fi
+    outbound="$(get_outbound_ipv4)"
+    if [[ -n "$outbound" && "$outbound" != 127.* ]]; then
+        echo "$outbound"
+        return 0
+    fi
+    first="$(local_ipv4_addresses | head -n1)"
+    if [[ -n "$first" && "$first" != 127.* ]]; then
+        echo "$first"
+        return 0
+    fi
+    return 1
+}
+
+# Print the ss line for any UDP socket that would block binding <addr>:<port>:
+# the exact address or a wildcard (0.0.0.0 / * / [::]) on that port.
+# Loopback-only listeners (e.g. systemd-resolved's 127.0.0.53:53) are not
+# conflicts for a specific non-loopback bind and are intentionally ignored.
+find_udp_conflict() {
+    local addr="$1" port="$2"
+    ss -ulnp 2>/dev/null | awk -v a="$addr" -v p="$port" '
+        $4 ~ /^(0\.0\.0\.0|\*|\[::\]):[0-9]+$/ { split($4, x, ":"); if (x[length(x)] == p) { print; exit } }
+        $4 == (a ":" p) { print; exit }
+    '
 }
 
 # ---------------------------------------------------------------------------

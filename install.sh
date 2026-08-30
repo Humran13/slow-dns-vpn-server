@@ -95,6 +95,10 @@ fi
 PUBLIC_IPV4="$(get_public_ipv4)"
 echo "Public IPv4: ${PUBLIC_IPV4:-unknown}"
 
+DNS_BIND_ADDRESS="$(select_dns_bind_address "$PUBLIC_IPV4")" || \
+    die "Could not determine a local IPv4 address for dnstt to bind (no global-scope interface address found)."
+echo "DNS bind address: ${DNS_BIND_ADDRESS}"
+
 # ---------------------------------------------------------------------------
 # 6. Interactive configuration
 # ---------------------------------------------------------------------------
@@ -235,6 +239,18 @@ if ! command -v ufw &>/dev/null; then
         state_add "PKG:ufw"
     fi
 fi
+
+# Preflight: confirm nothing already owns the exact bind address:port before
+# building/starting anything. Wildcard (0.0.0.0/*) listeners on the port count
+# as conflicts; loopback-only listeners such as systemd-resolved's
+# 127.0.0.53:53 do NOT conflict with a specific non-loopback bind.
+DNS_BIND_CONFLICT="$(find_udp_conflict "$DNS_BIND_ADDRESS" "$DNS_UDP_PORT" || true)"
+if [[ -n "$DNS_BIND_CONFLICT" ]]; then
+    log_err "UDP port ${DNS_UDP_PORT} is not free on bind address ${DNS_BIND_ADDRESS}:"
+    echo "  ${DNS_BIND_CONFLICT}"
+    die "Choose a different DNS UDP port (or stop the process owning that socket first), then re-run."
+fi
+log_ok "Preflight OK: ${DNS_BIND_ADDRESS}:${DNS_UDP_PORT}/udp is available."
 
 # ---------------------------------------------------------------------------
 # 8. Directories
@@ -393,6 +409,7 @@ conf_set BASE_DOMAIN "$BASE_DOMAIN"
 conf_set TUNNEL_DOMAIN "$TUNNEL_DOMAIN"
 conf_set NS_HOSTNAME "$NS_HOSTNAME"
 conf_set PUBLIC_IPV4 "$PUBLIC_IPV4"
+conf_set DNS_BIND_ADDRESS "$DNS_BIND_ADDRESS"
 conf_set DNS_UDP_PORT "$DNS_UDP_PORT"
 conf_set MTU "$MTU"
 conf_set SSH_TUNNEL_PORT "$SSH_TUNNEL_PORT"
@@ -407,7 +424,7 @@ log_ok "Saved ${SLOWDNS_SERVER_CONF}"
 # ---------------------------------------------------------------------------
 header "Installing systemd Services"
 
-TUNNEL_EXEC="${SLOWDNS_BIN_DIR}/dnstt-server -mtu ${MTU} -udp :${DNS_UDP_PORT} -privkey-file ${SLOWDNS_KEYS_DIR}/server.key ${TUNNEL_DOMAIN} 127.0.0.1:${SSH_TUNNEL_PORT}"
+TUNNEL_EXEC="${SLOWDNS_BIN_DIR}/dnstt-server -mtu ${MTU} -udp ${DNS_BIND_ADDRESS}:${DNS_UDP_PORT} -privkey-file ${SLOWDNS_KEYS_DIR}/server.key ${TUNNEL_DOMAIN} 127.0.0.1:${SSH_TUNNEL_PORT}"
 
 sed \
     -e "s#__EXEC__#${TUNNEL_EXEC}#" \
