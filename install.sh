@@ -549,11 +549,71 @@ echo "Public IPv4                     : ${PUBLIC_IPV4:-unknown}"
 echo "Server public key               : ${PUBKEY_HEX}"
 echo "Low-Profile Mode                : ${LOW_PROFILE_MODE}"
 echo
-echo "Add these DNS records at your domain registrar/DNS provider:"
-echo "  A    ${NS_HOSTNAME}    ->  ${PUBLIC_IPV4:-<your server IPv4>}"
-echo "  NS   ${TUNNEL_DOMAIN}  ->  ${NS_HOSTNAME}"
-echo
-echo "DNS propagation can take from a few minutes up to 24-48 hours."
+# Relative Host/Name examples, derived only when they can be computed without
+# guessing the DNS provider's zone: strip the exact base domain the user
+# entered from the full hostname. If the user overrode the hostnames, fall
+# back to showing full names only.
+NS_RELATIVE="" TUNNEL_RELATIVE=""
+if [[ "$NS_HOSTNAME" == *".${BASE_DOMAIN}" ]]; then
+    NS_RELATIVE="${NS_HOSTNAME%.${BASE_DOMAIN}}"
+fi
+if [[ "$TUNNEL_DOMAIN" == *".${BASE_DOMAIN}" ]]; then
+    TUNNEL_RELATIVE="${TUNNEL_DOMAIN%.${BASE_DOMAIN}}"
+fi
+
+cat <<EOF
+
+========================================
+  DNS Records You Must Create
+========================================
+
+You entered this Slow DNS base domain:
+    ${BASE_DOMAIN}
+
+The installer generated these hostnames:
+    Nameserver (A record) : ${NS_HOSTNAME}
+    Tunnel zone (NS record): ${TUNNEL_DOMAIN}
+
+DNS providers differ in how they handle the Host/Name field. Some
+automatically append "${BASE_DOMAIN}", others expect the full hostname.
+
+If your provider appends "${BASE_DOMAIN}" automatically, enter ONLY the
+relative Host/Name:
+
+----------------------------------------
+A RECORD
+----------------------------------------
+    Type        : A
+    Host / Name : ${NS_RELATIVE:-<use Full name below>}
+    Value       : ${PUBLIC_IPV4:-<your server IPv4>}
+    Full name   : ${NS_HOSTNAME}
+
+----------------------------------------
+NS RECORD
+----------------------------------------
+    Type        : NS
+    Host / Name : ${TUNNEL_RELATIVE:-<use Full name below>}
+    Value       : ${NS_HOSTNAME}
+    Full name   : ${TUNNEL_DOMAIN}
+
+IMPORTANT: if your provider appends "${BASE_DOMAIN}" automatically, do NOT
+paste the full hostname into the Host/Name field - you may accidentally
+create something wrong like:
+    ${NS_HOSTNAME}.${BASE_DOMAIN}
+
+If your provider expects FULL hostnames, use the "Full name" values above:
+
+    A    ${NS_HOSTNAME}    ->  ${PUBLIC_IPV4:-<your server IPv4>}
+    NS   ${TUNNEL_DOMAIN}  ->  ${NS_HOSTNAME}
+
+Providers may call these fields "Host", "Name", "Hostname" or "Record name",
+and "Value", "Target", "Points to" or "Nameserver".
+
+If your DNS provider has a proxy/CDN switch, keep the nameserver A record
+DNS-only / unproxied.
+
+DNS propagation can take from a few minutes up to 24-48 hours.
+EOF
 echo
 
 if confirm "Create your first Slow DNS VPN user now?" y; then

@@ -213,6 +213,7 @@ conf_set() {
 
 load_server_conf() {
     require_installed
+    BASE_DOMAIN="$(conf_get BASE_DOMAIN)"
     TUNNEL_DOMAIN="$(conf_get TUNNEL_DOMAIN)"
     NS_HOSTNAME="$(conf_get NS_HOSTNAME)"
     PUBLIC_IPV4="$(conf_get PUBLIC_IPV4)"

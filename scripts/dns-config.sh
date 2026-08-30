@@ -10,10 +10,36 @@ load_server_conf
 
 header "DNS Configuration"
 
-echo "Add these records at your domain's DNS provider / registrar:"
+# Relative Host/Name examples, derived only when they can be computed without
+# guessing the DNS provider's zone (strip the exact base domain the user
+# entered). Fall back to full names only otherwise.
+NS_RELATIVE="" TUNNEL_RELATIVE=""
+if [[ "$NS_HOSTNAME" == *".${BASE_DOMAIN}" ]]; then
+    NS_RELATIVE="${NS_HOSTNAME%.${BASE_DOMAIN}}"
+fi
+if [[ "$TUNNEL_DOMAIN" == *".${BASE_DOMAIN}" ]]; then
+    TUNNEL_RELATIVE="${TUNNEL_DOMAIN%.${BASE_DOMAIN}}"
+fi
+
+header "DNS Configuration"
+
+echo "The two DNS records you need at your domain's DNS provider:"
 echo
 echo "  A    ${NS_HOSTNAME}    ->  ${PUBLIC_IPV4:-<this server IPv4>}"
 echo "  NS   ${TUNNEL_DOMAIN}  ->  ${NS_HOSTNAME}"
+echo
+echo "If your provider automatically appends '${BASE_DOMAIN}' to the Host/Name"
+echo "field, enter the relative part instead of the full hostname:"
+echo
+printf '  A    Type=A  Host/Name: %s  Value: %s   (creates %s)\n' \
+    "${NS_RELATIVE:-<full name>}" "${PUBLIC_IPV4:-<this server IPv4>}" "$NS_HOSTNAME"
+printf '  NS   Type=NS  Host/Name: %s  Value: %s   (creates %s)\n' \
+    "${TUNNEL_RELATIVE:-<full name>}" "$NS_HOSTNAME" "$TUNNEL_DOMAIN"
+echo
+echo "IMPORTANT: if your provider appends the domain, do NOT paste the full"
+echo "hostname into Host/Name or you may create something wrong like"
+echo "${NS_HOSTNAME}.${BASE_DOMAIN}. If your provider wants full hostnames,"
+echo "use the full names shown above."
 echo
 echo "The 'A' record lets recursive resolvers find this server. The 'NS' record"
 echo "delegates the tunnel zone to it, so DNS queries for names under"
@@ -47,7 +73,13 @@ if [[ -n "$A_RESULT" ]]; then
         log_ok "  Matches this server's public IPv4."
     fi
 else
-    log_warn "  No A record found yet for ${NS_HOSTNAME}. DNS may not have propagated."
+    log_warn "  A record not found for ${NS_HOSTNAME}."
+    echo "  Expected value    : ${PUBLIC_IPV4:-<this server IPv4>}"
+    echo "  Expected full name: ${NS_HOSTNAME}"
+    if [[ -n "$NS_RELATIVE" ]]; then
+        echo "  Host/Name (if your provider appends '${BASE_DOMAIN}'): ${NS_RELATIVE}"
+    fi
+    echo "  (DNS may simply not have propagated yet.)"
 fi
 
 NS_RESULT="$(resolve "$TUNNEL_DOMAIN" NS)"
@@ -59,7 +91,13 @@ if [[ -n "$NS_RESULT" ]]; then
         log_warn "  Delegation does not point at ${NS_HOSTNAME}. Check your registrar's NS record."
     fi
 else
-    log_warn "  No NS record found yet for ${TUNNEL_DOMAIN}. DNS may not have propagated."
+    log_warn "  NS record not found for ${TUNNEL_DOMAIN}."
+    echo "  Expected target   : ${NS_HOSTNAME}"
+    echo "  Expected full name: ${TUNNEL_DOMAIN}"
+    if [[ -n "$TUNNEL_RELATIVE" ]]; then
+        echo "  Host/Name (if your provider appends '${BASE_DOMAIN}'): ${TUNNEL_RELATIVE}"
+    fi
+    echo "  (DNS may simply not have propagated yet.)"
 fi
 
 echo

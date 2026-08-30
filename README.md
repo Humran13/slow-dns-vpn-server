@@ -131,15 +131,60 @@ Slow DNS works by making this server the **authoritative name server** for a
 subdomain. You need to add two DNS records at your domain's DNS provider:
 
 ```
-A    ns.example.com       ->  <this server's public IPv4>
-NS   tunnel.example.com   ->  ns.example.com
+A    <nameserver hostname>   ->  <this server's public IPv4>
+NS   <tunnel zone>           ->  <nameserver hostname>
 ```
 
-The installer asks for your base domain (e.g. `example.com`) and derives
-these two subdomains automatically (you can override the labels if you
-prefer). DNS propagation can take anywhere from a few minutes to 24-48
-hours. The installer and the manager's **Show DNS Configuration** screen
-both check whether these records have propagated correctly.
+The installer asks for the base domain you want to use and derives these two
+hostnames automatically (a nameserver hostname `ns.<base>` and the tunnel
+zone `tunnel.<base>`; you can override the labels). DNS propagation can take
+anywhere from a few minutes to 24-48 hours. The installer and the manager's
+**DNS Configuration** screen both check whether these records have
+propagated correctly.
+
+**Example 1 - you enter `mydomain.com`:**
+
+```
+A RECORD
+  Type        : A
+  Host / Name : ns
+  Value       : <server public IPv4>
+  Full name   : ns.mydomain.com
+
+NS RECORD
+  Type        : NS
+  Host / Name : tunnel
+  Value       : ns.mydomain.com
+  Full name   : tunnel.mydomain.com
+```
+
+**Example 2 - you enter `abc.mydomain.com`** (shown for a DNS provider that
+manages/appends the parent zone `mydomain.com`):
+
+```
+A RECORD
+  Type        : A
+  Host / Name : ns.abc
+  Value       : <server public IPv4>
+  Full name   : ns.abc.mydomain.com
+
+NS RECORD
+  Type        : NS
+  Host / Name : tunnel.abc
+  Value       : ns.abc.mydomain.com
+  Full name   : tunnel.abc.mydomain.com
+```
+
+**Watch out:** many DNS providers automatically append the domain to the
+Host/Name field. If yours does, enter only the relative part shown above
+(`ns`, or `ns.abc` in the subdomain example) - never the full hostname, or
+you may accidentally create `ns.mydomain.com.mydomain.com`. If your provider
+requires full hostnames instead, use the "Full name" value. Providers may
+call these fields "Host", "Name", "Hostname" or "Record name", and "Value",
+"Target", "Points to" or "Nameserver".
+
+If your DNS provider offers a proxy/CDN switch, keep the nameserver A record
+DNS-only / unproxied.
 
 This installer cannot add these records for you automatically - registrar
 APIs vary too widely to support safely and generically. You add them
