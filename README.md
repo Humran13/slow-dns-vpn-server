@@ -135,14 +135,15 @@ A    <nameserver hostname>   ->  <this server's public IPv4>
 NS   <tunnel zone>           ->  <nameserver hostname>
 ```
 
-The installer asks for the base domain you want to use and derives these two
-hostnames automatically (a nameserver hostname `ns.<base>` and the tunnel
-zone `tunnel.<base>`; you can override the labels). DNS propagation can take
-anywhere from a few minutes to 24-48 hours. The installer and the manager's
-**DNS Configuration** screen both check whether these records have
+The installer asks for the Slow DNS base domain and for the DNS zone you
+actually manage at your provider, then derives the hostnames. The relative
+Host/Name values shown below are calculated from the managed zone, so a base
+domain that is itself a subdomain still gets correct values. DNS propagation
+can take anywhere from a few minutes to 24-48 hours. The installer and the
+manager's **DNS Configuration** screen both check whether these records have
 propagated correctly.
 
-**Example 1 - you enter `mydomain.com`:**
+**Example 1 - Slow DNS base `mydomain.com`, managed DNS zone `mydomain.com`:**
 
 ```
 A RECORD
@@ -158,8 +159,7 @@ NS RECORD
   Full name   : tunnel.mydomain.com
 ```
 
-**Example 2 - you enter `abc.mydomain.com`** (shown for a DNS provider that
-manages/appends the parent zone `mydomain.com`):
+**Example 2 - Slow DNS base `abc.mydomain.com`, managed DNS zone `mydomain.com`:**
 
 ```
 A RECORD
@@ -175,13 +175,13 @@ NS RECORD
   Full name   : tunnel.abc.mydomain.com
 ```
 
-**Watch out:** many DNS providers automatically append the domain to the
-Host/Name field. If yours does, enter only the relative part shown above
-(`ns`, or `ns.abc` in the subdomain example) - never the full hostname, or
-you may accidentally create `ns.mydomain.com.mydomain.com`. If your provider
-requires full hostnames instead, use the "Full name" value. Providers may
-call these fields "Host", "Name", "Hostname" or "Record name", and "Value",
-"Target", "Points to" or "Nameserver".
+**Watch out:** most DNS providers automatically append the managed DNS zone
+to the Host/Name field. If yours does, enter only the relative part shown
+above (`ns`, or `ns.abc` in the subdomain example) - never the full
+hostname, or you may accidentally create `ns.abc.mydomain.com.mydomain.com`.
+If your provider requires full hostnames instead, use the "Full name" value.
+Providers may call these fields "Host", "Name", "Hostname" or "Record name",
+and "Value", "Target", "Points to" or "Nameserver".
 
 If your DNS provider offers a proxy/CDN switch, keep the nameserver A record
 DNS-only / unproxied.

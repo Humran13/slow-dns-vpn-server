@@ -214,6 +214,7 @@ conf_set() {
 load_server_conf() {
     require_installed
     BASE_DOMAIN="$(conf_get BASE_DOMAIN)"
+    DNS_ZONE="$(conf_get DNS_ZONE)"
     TUNNEL_DOMAIN="$(conf_get TUNNEL_DOMAIN)"
     NS_HOSTNAME="$(conf_get NS_HOSTNAME)"
     PUBLIC_IPV4="$(conf_get PUBLIC_IPV4)"
@@ -322,6 +323,17 @@ valid_username() {
 valid_password() {
     local p="$1"
     [[ ${#p} -ge 8 ]]
+}
+
+# The user's managed DNS zone must be the base domain itself or a true parent
+# zone (a dot-boundary suffix), e.g. base vpn.mydomain.com accepts zone
+# mydomain.com. The user states which zone they edit; no public-suffix
+# guessing is performed here.
+valid_dns_zone_for_base() {
+    local zone="$1" base="$2"
+    [[ "$zone" =~ ^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$ ]] || return 1
+    [[ "$base" == "$zone" || "$base" == *".${zone}" ]] || return 1
+    return 0
 }
 
 is_slowdns_user() {

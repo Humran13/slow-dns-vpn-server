@@ -121,6 +121,33 @@ while [[ -z "$BASE_DOMAIN" ]]; do
     fi
 done
 
+# Ask which DNS zone the user actually manages at their provider. This is not
+# derived from BASE_DOMAIN by label counting - a subdomain base such as
+# vpn.mydomain.com may live inside the managed zone mydomain.com. When
+# reconfiguring an existing install, prefill the stored value.
+cat <<'EOF'
+
+Which DNS zone are you managing at your DNS provider? This is the zone the
+Host/Name field of DNS records lives in.
+
+Examples:
+  Slow DNS base  vpn.mydomain.com    ->  managed zone  mydomain.com
+  Slow DNS base  mydomain.com        ->  managed zone  mydomain.com
+EOF
+echo
+DNS_ZONE=""
+while true; do
+    default_zone="$(conf_get DNS_ZONE 2>/dev/null || true)"
+    [[ -n "$default_zone" ]] || default_zone="$BASE_DOMAIN"
+    read -r -p "Managed DNS zone [${default_zone}]: " input
+    DNS_ZONE="${input:-$default_zone}"
+    DNS_ZONE="${DNS_ZONE,,}"
+    if valid_dns_zone_for_base "$DNS_ZONE" "$BASE_DOMAIN"; then
+        break
+    fi
+    log_warn "'${DNS_ZONE}' is not a DNS zone containing '${BASE_DOMAIN}' (use '${BASE_DOMAIN}' itself or a parent zone such as mydomain.com)."
+done
+
 NS_HOSTNAME="ns.${BASE_DOMAIN}"
 TUNNEL_DOMAIN="tunnel.${BASE_DOMAIN}"
 
@@ -417,6 +444,7 @@ log_ok "SSH backend configuration validated."
 header "Writing Server Configuration"
 
 conf_set BASE_DOMAIN "$BASE_DOMAIN"
+conf_set DNS_ZONE "$DNS_ZONE"
 conf_set TUNNEL_DOMAIN "$TUNNEL_DOMAIN"
 conf_set NS_HOSTNAME "$NS_HOSTNAME"
 conf_set PUBLIC_IPV4 "$PUBLIC_IPV4"
@@ -549,16 +577,15 @@ echo "Public IPv4                     : ${PUBLIC_IPV4:-unknown}"
 echo "Server public key               : ${PUBKEY_HEX}"
 echo "Low-Profile Mode                : ${LOW_PROFILE_MODE}"
 echo
-# Relative Host/Name examples, derived only when they can be computed without
-# guessing the DNS provider's zone: strip the exact base domain the user
-# entered from the full hostname. If the user overrode the hostnames, fall
-# back to showing full names only.
+# Relative Host/Name values, derived from the managed DNS zone the user
+# declared (never by guessing from label counts). If the user overrode the
+# hostnames so they do not live under DNS_ZONE, fall back to full names only.
 NS_RELATIVE="" TUNNEL_RELATIVE=""
-if [[ "$NS_HOSTNAME" == *".${BASE_DOMAIN}" ]]; then
-    NS_RELATIVE="${NS_HOSTNAME%.${BASE_DOMAIN}}"
+if [[ -n "$DNS_ZONE" && "$NS_HOSTNAME" == *".${DNS_ZONE}" ]]; then
+    NS_RELATIVE="${NS_HOSTNAME%.${DNS_ZONE}}"
 fi
-if [[ "$TUNNEL_DOMAIN" == *".${BASE_DOMAIN}" ]]; then
-    TUNNEL_RELATIVE="${TUNNEL_DOMAIN%.${BASE_DOMAIN}}"
+if [[ -n "$DNS_ZONE" && "$TUNNEL_DOMAIN" == *".${DNS_ZONE}" ]]; then
+    TUNNEL_RELATIVE="${TUNNEL_DOMAIN%.${DNS_ZONE}}"
 fi
 
 cat <<EOF
@@ -567,41 +594,35 @@ cat <<EOF
   DNS Records You Must Create
 ========================================
 
-You entered this Slow DNS base domain:
+Your DNS provider is managing:
+    ${DNS_ZONE}
+
+Your Slow DNS base is:
     ${BASE_DOMAIN}
-
-The installer generated these hostnames:
-    Nameserver (A record) : ${NS_HOSTNAME}
-    Tunnel zone (NS record): ${TUNNEL_DOMAIN}
-
-DNS providers differ in how they handle the Host/Name field. Some
-automatically append "${BASE_DOMAIN}", others expect the full hostname.
-
-If your provider appends "${BASE_DOMAIN}" automatically, enter ONLY the
-relative Host/Name:
 
 ----------------------------------------
 A RECORD
 ----------------------------------------
-    Type        : A
-    Host / Name : ${NS_RELATIVE:-<use Full name below>}
-    Value       : ${PUBLIC_IPV4:-<your server IPv4>}
-    Full name   : ${NS_HOSTNAME}
+Type        : A
+Host / Name : ${NS_RELATIVE:-<use Full result below>}
+Value       : ${PUBLIC_IPV4:-<your server IPv4>}
+Full result : ${NS_HOSTNAME}
 
 ----------------------------------------
 NS RECORD
 ----------------------------------------
-    Type        : NS
-    Host / Name : ${TUNNEL_RELATIVE:-<use Full name below>}
-    Value       : ${NS_HOSTNAME}
-    Full name   : ${TUNNEL_DOMAIN}
+Type        : NS
+Host / Name : ${TUNNEL_RELATIVE:-<use Full result below>}
+Value       : ${NS_HOSTNAME}
+Full result : ${TUNNEL_DOMAIN}
 
-IMPORTANT: if your provider appends "${BASE_DOMAIN}" automatically, do NOT
-paste the full hostname into the Host/Name field - you may accidentally
-create something wrong like:
-    ${NS_HOSTNAME}.${BASE_DOMAIN}
+IMPORTANT:
+Most DNS providers managing "${DNS_ZONE}" automatically append that zone to
+the Host/Name field. If yours does, enter ONLY the relative Host/Name above
+(e.g. ${NS_RELATIVE:-<full name>} for the A record), NOT the full hostname.
 
-If your provider expects FULL hostnames, use the "Full name" values above:
+If your provider expects FULL hostnames instead, use the "Full result"
+values directly:
 
     A    ${NS_HOSTNAME}    ->  ${PUBLIC_IPV4:-<your server IPv4>}
     NS   ${TUNNEL_DOMAIN}  ->  ${NS_HOSTNAME}
