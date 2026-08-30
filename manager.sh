@@ -83,28 +83,65 @@ restart_service() {
     fi
 }
 
-view_logs() {
-    header "View Logs"
-    echo "1) Slow DNS tunnel - last 50 lines"
-    echo "2) Slow DNS tunnel - live (Ctrl+C to stop)"
-    echo "3) SSH backend - last 50 lines"
-    echo "4) SSH backend - live (Ctrl+C to stop)"
-    echo "5) SSH authentication log (system auth log, filtered)"
-    read -r -p "Choose an option [1-5]: " choice
-    case "$choice" in
-        1) journalctl -u "$SLOWDNS_TUNNEL_SERVICE" --no-pager -n 50 ;;
-        2) journalctl -u "$SLOWDNS_TUNNEL_SERVICE" -f ;;
-        3) journalctl -u "$SLOWDNS_SSH_SERVICE" --no-pager -n 50 ;;
-        4) journalctl -u "$SLOWDNS_SSH_SERVICE" -f ;;
-        5)
-            if [[ -f /var/log/auth.log ]]; then
-                grep -i "slowdns-ssh\|sshd\[" /var/log/auth.log | tail -n 50
-            else
-                journalctl -u "$SLOWDNS_SSH_SERVICE" -t sshd --no-pager -n 50
-            fi
-            ;;
-        *) log_warn "Invalid choice." ;;
-    esac
+logs_menu() {
+    while true; do
+        clear
+        header "Logs"
+        cat <<'EOF'
+ [01] Tunnel Logs - Last 50 Lines
+ [02] SSH Backend Logs - Last 50 Lines
+ [03] Follow Tunnel Logs
+ [04] Follow SSH Backend Logs
+ [05] Show Both Service Status
+
+ [00] Back
+EOF
+        echo
+        read -r -p "Select an option: " choice
+        echo
+        case "$choice" in
+            1|01) journalctl -u "$SLOWDNS_TUNNEL_SERVICE" -n 50 --no-pager ;;
+            2|02) journalctl -u "$SLOWDNS_SSH_SERVICE" -n 50 --no-pager ;;
+            3|03) follow_journal "$SLOWDNS_TUNNEL_SERVICE" ;;
+            4|04) follow_journal "$SLOWDNS_SSH_SERVICE" ;;
+            5|05) show_service_status ;;
+            0|00) break ;;
+            *) log_warn "Invalid option." ;;
+        esac
+        echo
+        press_enter
+    done
+}
+
+# Live-follow a project journal. Ctrl+C only stops the follower, not the menu.
+follow_journal() {
+    local svc="$1" pid rc
+    log_info "Following ${svc} - press Ctrl+C to stop."
+    (
+        trap 'exit 130' INT
+        journalctl -fu "$svc"
+    ) &
+    pid=$!
+    # Ignore Ctrl+C in this shell so it only reaches the follower subshell.
+    trap '' INT
+    if wait "$pid"; then
+        rc=0
+    else
+        rc=$?
+    fi
+    trap - INT
+    echo
+    if [[ "$rc" -gt 128 ]]; then
+        log_info "Log following stopped."
+    fi
+}
+
+show_service_status() {
+    header "Service Status"
+    printf '%-22s : %s\n' \
+        "SSH Backend" "$(service_is_active "$SLOWDNS_SSH_SERVICE" && echo ONLINE || echo OFFLINE)"
+    printf '%-22s : %s\n' \
+        "Slow DNS Tunnel" "$(service_is_active "$SLOWDNS_TUNNEL_SERVICE" && echo ONLINE || echo OFFLINE)"
 }
 
 start_slowdns() {
@@ -260,7 +297,7 @@ while true; do
         4) show_server_configuration || true ;;
         5) bash "${SCRIPT_DIR}/scripts/dns-config.sh" || true ;;
         6) bash "${SCRIPT_DIR}/status.sh" || true ;;
-        7) view_logs || true ;;
+        7) logs_menu || true ;;
         8) bash "${SCRIPT_DIR}/scripts/backup.sh" || true ;;
         9) bash "${SCRIPT_DIR}/scripts/restore.sh" || true ;;
         10) bash "${SCRIPT_DIR}/scripts/repair.sh" || true ;;
