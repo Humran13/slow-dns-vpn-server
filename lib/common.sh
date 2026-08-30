@@ -335,7 +335,13 @@ user_status() {
 
     local shadow_line lock_flag
     shadow_line="$(getent shadow "$u" 2>/dev/null || true)"
-    lock_flag="$(echo "$shadow_line" | cut -d: -f2 | head -c1)"
+    # Second field of the shadow line is the password hash; its first character
+    # is '!' when the account is locked. Pure-bash extraction avoids the old
+    # `echo ... | cut ... | head -c1` pipeline, which can trip SIGPIPE and fail
+    # the whole command substitution under `set -o pipefail`.
+    lock_flag="${shadow_line#*:}"
+    lock_flag="${lock_flag%%:*}"
+    lock_flag="${lock_flag:0:1}"
 
     expiry_days="$(echo "$shadow_line" | cut -d: -f8)"
     if [[ -n "$expiry_days" ]]; then

@@ -27,7 +27,10 @@ done
 PASSWORD=""
 AUTO_GENERATED=0
 if confirm "Auto-generate a secure random password?" y; then
-    PASSWORD="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 16)"
+    # Finite read from /dev/urandom converted to hex: od reads exactly 12 bytes
+    # and exits normally, so no SIGPIPE can kill an upstream producer the way
+    # `tr -dc ... </dev/urandom | head -c 16` does under `set -o pipefail`.
+    PASSWORD="$(od -An -v -N 12 -tx1 /dev/urandom | tr -cd '[:xdigit:]')"
     AUTO_GENERATED=1
 else
     while true; do
