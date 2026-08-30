@@ -22,10 +22,15 @@ for pkg in git curl ca-certificates openssh-server; do
     fi
 done
 
-# --- Config directory permissions ------------------------------------------
-if [[ "$(stat -c '%a' "$SLOWDNS_CONFIG_DIR" 2>/dev/null)" != "700" ]]; then
-    fix "Fixing permissions on ${SLOWDNS_CONFIG_DIR}."
-    chmod 0700 "$SLOWDNS_CONFIG_DIR"
+# --- Config directory ownership/permissions ---------------------------------
+# The config root is root:slowdns 0710: root keeps full access, the slowdns
+# service account's group gets traverse-only (enough to reach its keys), and
+# everyone else gets nothing.
+if [[ "$(stat -c '%a' "$SLOWDNS_CONFIG_DIR" 2>/dev/null)" != "710" || \
+      "$(stat -c '%U:%G' "$SLOWDNS_CONFIG_DIR" 2>/dev/null)" != "root:${SLOWDNS_SYSTEM_USER}" ]]; then
+    fix "Fixing ownership/permissions on ${SLOWDNS_CONFIG_DIR} (root:${SLOWDNS_SYSTEM_USER}, 0710)."
+    chown root:"$SLOWDNS_SYSTEM_USER" "$SLOWDNS_CONFIG_DIR"
+    chmod 0710 "$SLOWDNS_CONFIG_DIR"
 fi
 for d in "$SLOWDNS_KEYS_DIR" "$SLOWDNS_SSH_DIR" "$SLOWDNS_USERS_DIR"; do
     if [[ -d "$d" && "$(stat -c '%a' "$d" 2>/dev/null)" != "700" ]]; then
@@ -33,8 +38,14 @@ for d in "$SLOWDNS_KEYS_DIR" "$SLOWDNS_SSH_DIR" "$SLOWDNS_USERS_DIR"; do
         chmod 0700 "$d"
     fi
 done
+# The tunnel service reads server.key, so the keys directory must be owned by
+# the service account and the private key must stay 0600.
+if [[ -d "$SLOWDNS_KEYS_DIR" && "$(stat -c '%U:%G' "$SLOWDNS_KEYS_DIR" 2>/dev/null)" != "${SLOWDNS_SYSTEM_USER}:${SLOWDNS_SYSTEM_USER}" ]]; then
+    fix "Fixing ownership on ${SLOWDNS_KEYS_DIR} (${SLOWDNS_SYSTEM_USER}:${SLOWDNS_SYSTEM_USER})."
+    chown -R "${SLOWDNS_SYSTEM_USER}:${SLOWDNS_SYSTEM_USER}" "$SLOWDNS_KEYS_DIR"
+fi
 if [[ -f "${SLOWDNS_KEYS_DIR}/server.key" && "$(stat -c '%a' "${SLOWDNS_KEYS_DIR}/server.key")" != "600" ]]; then
-    fix "Fixing permissions on server.key."
+    fix "Fixing permissions on server.key (0600)."
     chmod 0600 "${SLOWDNS_KEYS_DIR}/server.key"
 fi
 

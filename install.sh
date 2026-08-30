@@ -284,6 +284,14 @@ if ! id "$SLOWDNS_SYSTEM_USER" &>/dev/null; then
     log_ok "Created unprivileged service account: ${SLOWDNS_SYSTEM_USER} (runs the dnstt tunnel process only)"
 fi
 
+# The dedicated service account must be able to traverse into its keys
+# directory, but must NOT be able to read/list the rest of the configuration.
+# Give its primary group (slowdns) traverse-only access to the config root and
+# keep everything else root-only. Applied unconditionally so re-running the
+# installer repairs an existing install that has root:root 0700 here.
+chown root:"$SLOWDNS_SYSTEM_USER" "$SLOWDNS_CONFIG_DIR"
+chmod 0710 "$SLOWDNS_CONFIG_DIR"
+
 # ---------------------------------------------------------------------------
 # 10. Build dnstt from pinned, verified source
 # ---------------------------------------------------------------------------
@@ -350,13 +358,16 @@ if [[ ! -f "${SLOWDNS_KEYS_DIR}/server.key" ]]; then
     "${SLOWDNS_BIN_DIR}/dnstt-server" -gen-key \
         -privkey-file "${SLOWDNS_KEYS_DIR}/server.key" \
         -pubkey-file "${SLOWDNS_KEYS_DIR}/server.pub"
-    chmod 0600 "${SLOWDNS_KEYS_DIR}/server.key"
-    chmod 0644 "${SLOWDNS_KEYS_DIR}/server.pub"
     log_ok "Generated tunnel keypair (server.key is private and never leaves this server)."
 else
     log_info "Existing tunnel keypair found, keeping it."
 fi
+# Enforce the key ownership/modes unconditionally so a re-run or partial
+# recovery repairs them too. server.key stays 0600 to the service account.
 chown -R "${SLOWDNS_SYSTEM_USER}:${SLOWDNS_SYSTEM_USER}" "$SLOWDNS_KEYS_DIR"
+chmod 0700 "$SLOWDNS_KEYS_DIR"
+chmod 0600 "${SLOWDNS_KEYS_DIR}/server.key"
+chmod 0644 "${SLOWDNS_KEYS_DIR}/server.pub"
 
 PUBKEY_HEX="$(cat "${SLOWDNS_KEYS_DIR}/server.pub")"
 
@@ -417,6 +428,7 @@ conf_set INSTALL_DATE "$(date +%F)"
 conf_set DNSTT_VERSION "$DNSTT_TAG"
 conf_set LOW_PROFILE_MODE "$LOW_PROFILE_MODE"
 chmod 0600 "$SLOWDNS_SERVER_CONF"
+chmod 0600 "$SLOWDNS_STATE_FILE" 2>/dev/null || true
 log_ok "Saved ${SLOWDNS_SERVER_CONF}"
 
 # ---------------------------------------------------------------------------

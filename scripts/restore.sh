@@ -68,6 +68,17 @@ cp -a "$WORK_DIR/users" "$SLOWDNS_USERS_DIR"
 chmod -R go-rwx "$SLOWDNS_KEYS_DIR" "$SLOWDNS_SSH_DIR" "$SLOWDNS_USERS_DIR"
 [[ -f "$WORK_DIR/install.state" ]] && cp -a "$WORK_DIR/install.state" "$SLOWDNS_STATE_FILE"
 
+# Re-establish the service-account access model after restore: the tunnel user
+# must be able to traverse the config root into its keys, and own the keys
+# directory. server.conf and install.state stay root-only.
+chown root:"$SLOWDNS_SYSTEM_USER" "$SLOWDNS_CONFIG_DIR"
+chmod 0710 "$SLOWDNS_CONFIG_DIR"
+chown -R "$SLOWDNS_SYSTEM_USER:$SLOWDNS_SYSTEM_USER" "$SLOWDNS_KEYS_DIR"
+chmod 0700 "$SLOWDNS_KEYS_DIR"
+chmod 0600 "${SLOWDNS_KEYS_DIR}/server.key"
+chmod 0600 "$SLOWDNS_SERVER_CONF"
+chmod 0600 "$SLOWDNS_STATE_FILE" 2>/dev/null || true
+
 log_info "Restoring Slow DNS user accounts..."
 if ! getent group "$SLOWDNS_VPN_GROUP" &>/dev/null; then
     groupadd --system "$SLOWDNS_VPN_GROUP"
