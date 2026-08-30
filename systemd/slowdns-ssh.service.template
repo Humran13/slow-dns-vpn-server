@@ -10,11 +10,19 @@ StartLimitIntervalSec=__STARTLIMITINTERVAL__
 StartLimitBurst=__STARTLIMITBURST__
 
 [Service]
-Type=forking
-PIDFile=/run/slowdns-ssh.pid
+# Foreground mode (-D) under Type=notify: systemd directly supervises the
+# dedicated sshd process and receives READY=1 once it is actually accepting
+# connections. sshd's sd_notify support needs OpenSSH >= 7.5, which every
+# supported Ubuntu release (18.04/20.04/22.04/24.04/26.04) ships - this is
+# the same lifecycle model Ubuntu itself uses for its packaged ssh.service.
+Type=notify
 ExecStartPre=/usr/sbin/sshd -t -f __SSHD_CONFIG__
-ExecStart=/usr/sbin/sshd -f __SSHD_CONFIG__
+ExecStart=/usr/sbin/sshd -D -f __SSHD_CONFIG__
 ExecReload=/bin/kill -HUP $MAINPID
+# Stop/reload only the supervised master; any in-flight tunnel session
+# processes are short-lived and are not force-killed on service stop
+# (this matches the packaged ssh.service behavior).
+KillMode=process
 
 # Resource ceiling (infinity = unlimited = today's default behavior; only
 # Low-Profile Mode sets a concrete cap). Sized generously since this sshd
