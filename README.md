@@ -171,7 +171,7 @@ The installer will:
 ## Creating the first user
 
 The installer offers to create your first user at the end of installation.
-You can also do this any time from the manager (option **1) Add User**), or
+You can also do this any time from the manager (**User Manager -> Add User**), or
 directly:
 
 ```bash
@@ -190,8 +190,69 @@ After installation, run:
 slowdns
 ```
 
-This opens the interactive management menu, showing live server status,
-domain, and user count, with numbered options for every management task.
+This opens the interactive management menu, showing live server status
+(tunnel + SSH backend), domain, and user count, with numbered options for
+every management task:
+
+```
+[01] User Manager
+[02] Service Control
+[03] Connection Details
+[04] Server Information
+[05] DNS Configuration
+[06] Server Status
+[07] Logs
+[08] Backup
+[09] Restore
+[10] Update / Repair Installation
+[11] Uninstall
+[00] Exit
+```
+
+Three options open their own submenu:
+
+- **User Manager** - add, remove, list, and inspect users; change passwords,
+  set expiry, and enable/disable accounts:
+
+  ```
+  [01] Add User
+  [02] Remove User
+  [03] List Users
+  [04] Show User
+  [05] Change Password
+  [06] Set Expiry
+  [07] Enable User
+  [08] Disable User
+  [00] Back
+  ```
+
+- **Service Control** - start, restart, and stop the Slow DNS services, or
+  restart just the tunnel or just the SSH backend:
+
+  ```
+  [01] Start Slow DNS
+  [02] Restart Slow DNS
+  [03] Stop Slow DNS
+  [04] Restart Tunnel Only
+  [05] Restart SSH Backend Only
+  [00] Back
+  ```
+
+- **Logs** - view or follow the tunnel and SSH backend logs, and show the
+  real systemd state of both services:
+
+  ```
+  [01] Tunnel Logs - Last 50 Lines
+  [02] SSH Backend Logs - Last 50 Lines
+  [03] Follow Tunnel Logs
+  [04] Follow SSH Backend Logs
+  [05] Show Both Service Status
+  [00] Back
+  ```
+
+**Service Control only ever manages the two project services,
+`slowdns-tunnel.service` and `slowdns-ssh.service`.** It never stops,
+starts, or restarts your VPS's administrative SSH server.
 
 ## Managing users
 
@@ -215,7 +276,7 @@ from the real Linux account state (`passwd -S` / `chage`), never guessed.
 
 ## Client configuration
 
-Use **slowdns -> 10) Show Client Connection Details** for the exact values
+Use **slowdns -> 3) Connection Details** for the exact values
 for your server. In general, the client needs:
 
 - The tunnel domain (e.g. `tunnel.example.com`)
@@ -277,8 +338,8 @@ domain, users, and tunnel/SSH keys are preserved; only the SSH backend
 config and systemd services are regenerated.
 
 **How to disable it:** answer "n" to the same prompt (this is also the
-default). `slowdns -> 9) Show Server Configuration` and `slowdns -> 12) Show
-Service Status` both show whether it's currently `Enabled` or `Disabled`.
+default). `slowdns -> 4) Server Information` and `slowdns -> 6) Server Status` both
+show whether it's currently `Enabled` or `Disabled`.
 
 **Settings it changes** (normal-mode values shown are the project's regular
 defaults - Low-Profile Mode does not change them for an install that leaves
@@ -320,32 +381,34 @@ exchange for less restart noise during a transient one.
 sudo bash status.sh
 ```
 
-or **slowdns -> 12) Show Service Status**. Every line reflects a real check
+or **slowdns -> 6) Server Status**. Every line reflects a real check
 (systemd unit state, an actual listening socket) - never "the config file
 exists, so it must be running."
 
 ## Logs
 
-**slowdns -> 15) View Logs** offers the tunnel service log, the SSH backend
-service log (both last-50 and live/follow modes), and a filtered view of SSH
-authentication activity.
+**slowdns -> 7) Logs** opens the Logs submenu: the tunnel and SSH backend
+logs (last 50 lines each), live follow mode for each, and a combined view of
+real service status. It only reads `slowdns-tunnel.service` and
+`slowdns-ssh.service` - the VPS administrative SSH logs are never shown or
+followed.
 
 ## Backup and restore
 
-**Backup** (`scripts/backup.sh` or manager option 16) archives
+**Backup** (`scripts/backup.sh` or **slowdns -> 8) Backup**) archives
 `server.conf`, tunnel/SSH keys, per-user metadata, and the account
 lines (from `/etc/passwd` / `/etc/shadow`, restricted to Slow DNS users
 only - never the whole system files) into
 `/var/backups/slow-dns-vpn/slowdns-backup-<timestamp>.tar.gz`, mode `600`.
 
-**Restore** (`scripts/restore.sh` or manager option 17) validates the
+**Restore** (`scripts/restore.sh` or **slowdns -> 9) Restore**) validates the
 archive, takes a safety backup of the *current* state first, restores
 configuration/keys/accounts, validates the resulting SSH configuration
 before restarting anything, and verifies both services come back up.
 
 ## Repair
 
-**slowdns -> 18) Update / Repair Installation** (`scripts/repair.sh`)
+**slowdns -> 10) Update / Repair Installation** (`scripts/repair.sh`)
 detects and fixes: missing packages, incorrect permissions, a missing
 binary, disabled or stopped services, a tunnel that isn't actually
 listening, an invalid SSH backend config, and a missing firewall rule. It
@@ -357,7 +420,7 @@ never touches user accounts.
 sudo bash uninstall.sh
 ```
 
-or **slowdns -> 19) Uninstall Slow DNS**. It explains exactly what will be
+or **slowdns -> 11) Uninstall**. It explains exactly what will be
 removed (services, config, keys, firewall rules added by this installer, the
 `slowdns` command, the dedicated service account) before asking for
 confirmation (default **No**). You are asked separately whether to also
@@ -369,7 +432,7 @@ firewall rules - is ever touched.
 ## Troubleshooting
 
 - **DNS record check fails / tunnel not reachable**: DNS propagation can
-  take up to 24-48 hours. Use **slowdns -> 11) Show DNS Configuration** to
+  take up to 24-48 hours. Use **slowdns -> 5) DNS Configuration** to
   re-check.
 - **Tunnel service won't start**: `journalctl -u slowdns-tunnel.service -n
   50`. Common cause: another process already bound to the configured UDP
@@ -377,9 +440,9 @@ firewall rules - is ever touched.
 - **SSH backend won't start**: `journalctl -u slowdns-ssh.service -n 50`.
   The installer validates the config with `sshd -t` before ever starting or
   restarting it, so a running install should always have valid config.
-- **User can't connect**: check status with **slowdns -> 4) Show User** -
+- **User can't connect**: check status with **slowdns -> User Manager -> Show User** -
   make sure the account isn't Disabled or Expired.
-- **Something seems broken after an update**: run **slowdns -> 18) Update /
+- **Something seems broken after an update**: run **slowdns -> 10) Update /
   Repair Installation**.
 
 ## Security notes
