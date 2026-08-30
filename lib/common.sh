@@ -27,7 +27,10 @@ SLOWDNS_VPN_GROUP="slowdnsusers"
 # Pinned upstream versions (see README "Credits" section for rationale).
 DNSTT_GIT_URL="https://www.bamsoftware.com/git/dnstt.git"
 DNSTT_TAG="v1.20260501.0"
-DNSTT_COMMIT="8fb3b30e6dbdc9006780327c6687623534d134f5"
+# The checked-out commit that refs/tags/v1.20260501.0 resolves to (the peeled
+# ^{} commit, NOT the annotated tag-object hash). Verified against upstream
+# with: git ls-remote --tags https://www.bamsoftware.com/git/dnstt.git
+DNSTT_COMMIT="0c5c52a57d899c05428c116898941761a2ed83c2"
 
 GO_VERSION="1.27.0"
 GO_SHA256_AMD64="675c26c449cbb18fc24b74650de1eabbae6e16f64326fd85a283fb3b58280685"
